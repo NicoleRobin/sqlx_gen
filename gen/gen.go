@@ -52,21 +52,22 @@ func (g *Generator) StartFromDDL(filename string, database string) error {
 func (g *Generator) genFromDDL(filename, database string) (map[string]*codeTuple, error) {
 	log.Info("genFromDDL(), filename:%s, database:%s", filename, database)
 
-	tables, err := parser.Parse(filename, database)
+	tables, err := parser.Parse(filename, database, true)
 	if err != nil {
 		log.Error("parser.Parse() failed, err:%s", err)
 		return nil, err
 	}
 
 	m := make(map[string]*codeTuple)
-	for _, e := range tables {
-		code, err := g.genModel(e)
+	for i, table := range tables {
+		log.Info("i:%d, table:%+v", i, *table)
+		code, err := g.genModel(table)
 		if err != nil {
 			log.Error("g.genModel() failed, err:%s", err)
 			continue
 		}
 
-		m[e.Name] = &codeTuple{
+		m[table.Name] = &codeTuple{
 			modelCode: code,
 		}
 	}
@@ -75,6 +76,9 @@ func (g *Generator) genFromDDL(filename, database string) (map[string]*codeTuple
 
 func (g *Generator) createFile(modelList map[string]*codeTuple) error {
 	log.Info("createFile, modelList:%+v", modelList)
+	for tableName, code := range modelList {
+		log.Info("tableName:%s, code:%+v", tableName, *code)
+	}
 	return nil
 }
 
