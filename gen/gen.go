@@ -16,6 +16,10 @@ type (
 	// Table
 	Table struct {
 		parser.Table
+		PrimaryCacheKey        Key
+		UniqueCacheKey         []Key
+		ContainsUniqueCacheKey bool
+		ignoreColumns          []string
 	}
 
 	codeTuple struct {
