@@ -5,12 +5,14 @@ import (
 	"github.com/nicolerobin/log"
 	"github.com/nicolerobin/sqlx_gen/parser"
 	"path/filepath"
+	"strings"
 )
 
 type (
 	// Generator generator
 	Generator struct {
-		dir string
+		dir          string
+		isPostgreSql bool
 	}
 
 	// Table
@@ -20,6 +22,22 @@ type (
 		UniqueCacheKey         []Key
 		ContainsUniqueCacheKey bool
 		ignoreColumns          []string
+	}
+
+	// Option defines a function with argument defaultGenerator
+	Option func(generator *defaultGenerator)
+
+	code struct {
+		importCode string
+		varsCode   string
+		typesCode  string
+		newCode    string
+		insertCode string
+		findCode   string
+		updateCode string
+		deleteCode string
+		cacheExtra string
+		tableName  string
 	}
 
 	codeTuple struct {
@@ -65,7 +83,7 @@ func (g *Generator) genFromDDL(filename, database string) (map[string]*codeTuple
 	m := make(map[string]*codeTuple)
 	for i, table := range tables {
 		log.Info("i:%d, table:%+v", i, *table)
-		code, err := g.genModel(table)
+		code, err := g.genModel(table, false)
 		if err != nil {
 			log.Error("g.genModel() failed, err:%s", err)
 			continue
@@ -81,12 +99,13 @@ func (g *Generator) genFromDDL(filename, database string) (map[string]*codeTuple
 func (g *Generator) createFile(modelList map[string]*codeTuple) error {
 	log.Info("createFile, modelList:%+v", modelList)
 	for tableName, code := range modelList {
-		log.Info("tableName:%s, code:%+v", tableName, *code)
+		log.Info("tableName:%s, modelCode:%s, modelCustomCode:%s", tableName, code.modelCode,
+			code.modelCustomCode)
 	}
 	return nil
 }
 
-func (g *Generator) genModel(in *parser.Table) (string, error) {
+func (g *Generator) genModel(in *parser.Table, withCache bool) (string, error) {
 	log.Info("genModel(), in:%+v", *in)
 	if len(in.PrimaryKey.Name) == 0 {
 		return "", fmt.Errorf("table %s: missing primary key", in.Name)
@@ -100,6 +119,53 @@ func (g *Generator) genModel(in *parser.Table) (string, error) {
 		log.Error("genImports() failed, err:%s", err)
 		return "", err
 	}
+
+	varsCode, err := genVars(table, withCache, g.isPostgreSql)
+	if err != nil {
+		return "", err
+	}
+
+	insertCode, insertCodeMethod, err := genInsert(table, withCache, g.isPostgreSql)
+	if err != nil {
+		return "", err
+	}
+
+	findCode := make([]string, 0)
+	findOneCode, findOneCodeMethod, err := genFindOne(table, withCache, g.isPostgreSql)
+	if err != nil {
+		return "", err
+	}
+
+	ret, err := genFindOneByField(table, withCache, g.isPostgreSql)
+	if err != nil {
+		return "", err
+	}
+
+	findCode = append(findCode, findOneCode, ret.findOneMethod)
+	updateCode, updateCodeMethod, err := genUpdate(table, withCache, g.isPostgreSql)
+	if err != nil {
+		return "", err
+	}
+
+	var list []string
+	list = append(list, insertCodeMethod, findOneCodeMethod, ret.findOneInterfaceMethod,
+		updateCodeMethod, deleteCodeMethod)
+	typesCode, err := genTypes(table, strings.Join(list, "\n"), withCache)
+	if err != nil {
+		return "", err
+	}
+
+	newCode, err := genNew(table, withCache, g.isPostgreSql)
+	if err != nil {
+		return "", err
+	}
+
+	tableName, err := genTableName(table)
+	if err != nil {
+		return "", err
+	}
+
+	code := &code{}
 
 	return importsCode, nil
 }

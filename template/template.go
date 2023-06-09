@@ -28,6 +28,11 @@ var FindOne string
 //go:embed tpl/find-one-by-field.tpl
 var FindOneByField string
 
+// FindOneByField
+//
+//go:embed tpl/interface-find-one-by-field.tpl
+var FindOneByFieldMethod string
+
 // FindOneByFieldExtraMethod
 //
 //go:embed tpl/find-one-by-field-extra-method.tpl

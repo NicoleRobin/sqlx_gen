@@ -6,14 +6,14 @@ import (
 )
 
 func genFindOne(table Table, withCache, postgreSql bool) (string, string, error) {
-	buffer, err := template.With("fineOne").
+	output, err := template.With("fineOne").
 		Parse(template.FindOne).
 		Execute(map[string]any{
 			"withCache":                 withCache,
 			"upperStartCamelObject":     strcase.ToCamel(table.Name),
 			"lowerStartCamelObject":     Untitle(strcase.ToCamel(table.Name)),
 			"originalPrimaryKey":        wrapWithRawString(table.PrimaryKey.Name, postgreSql),
-			"lowerStartCamelPrimaryKey": EscapeGolangKeyword(Untitle(ToCamel(table.PrimaryKey.Name))),
+			"lowerStartCamelPrimaryKey": EscapeGolangKeyword(strcase.ToLowerCamel(table.PrimaryKey.Name)),
 			"dataType":                  table.PrimaryKey.DataType,
 			"cacheKey":                  table.PrimaryCacheKey.KeyExpression,
 			"cacheKeyVariable":          table.PrimaryCacheKey.KeyLeft,
@@ -27,8 +27,8 @@ func genFindOne(table Table, withCache, postgreSql bool) (string, string, error)
 	findOneMethod, err := template.With("findOneMethod").
 		Parse(template.InterfaceFindOne).
 		Execute(map[string]any{
-			"upperStartCamelObject":     camel,
-			"lowerStartCamelPrimaryKey": util.EscapeGolangKeyword(stringx.From(table.PrimaryKey.Name.ToCamel()).Untitle()),
+			"upperStartCamelObject":     strcase.ToCamel(table.Name),
+			"lowerStartCamelPrimaryKey": EscapeGolangKeyword(strcase.ToLowerCamel(table.PrimaryKey.Name)),
 			"dataType":                  table.PrimaryKey.DataType,
 			"data":                      table,
 		})
@@ -36,5 +36,7 @@ func genFindOne(table Table, withCache, postgreSql bool) (string, string, error)
 		return "", "", err
 	}
 
-	return buffer.String(), nil
+	return output.String(), findOneMethod.String(), nil
 }
+
+func genFineOneByField()
