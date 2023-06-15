@@ -2,9 +2,14 @@ package gen
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/iancoleman/strcase"
 	"github.com/nicolerobin/sqlx_gen/template"
-	"strings"
+)
+
+const (
+	NL = "\n"
 )
 
 type findOneCode struct {
@@ -53,11 +58,11 @@ func genFindOneByField(table Table, withCache, postgreSql bool) (*findOneCode, e
 
 		var in string
 		if len(inJoin) > 0 {
-			in = inJoin.With(", ").Source()
+			in = inJoin.With(", ")
 		}
 		output, err := t.Execute(map[string]any{
 			"upperStartCamelObject": camelTableName,
-			"upperField":            key.FieldNameJoin.Camel().With("").Source(),
+			"upperField":            key.FieldNameJoin.Camel().With(""),
 			"in":                    in,
 			"data":                  table,
 		})
@@ -68,60 +73,34 @@ func genFindOneByField(table Table, withCache, postgreSql bool) (*findOneCode, e
 		listMethod = append(listMethod, output.String())
 	}
 
-	if withCache {
-		text, err := pathx.LoadTemplate(category, findOneByFieldExtraMethodTemplateFile,
-			template.FindOneByFieldExtraMethod)
-		if err != nil {
-			return nil, err
-		}
-
-		out, err := util.With("findOneByFieldExtraMethod").Parse(text).Execute(map[string]any{
-			"upperStartCamelObject": camelTableName,
-			"primaryKeyLeft":        table.PrimaryCacheKey.VarLeft,
-			"lowerStartCamelObject": stringx.From(camelTableName).Untitle(),
-			"originalPrimaryField":  wrapWithRawString(table.PrimaryKey.Name.Source(), postgreSql),
-			"postgreSql":            postgreSql,
-			"data":                  table,
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		return &findOneCode{
-			findOneMethod:          strings.Join(list, pathx.NL),
-			findOneInterfaceMethod: strings.Join(listMethod, pathx.NL),
-			cacheExtra:             out.String(),
-		}, nil
-	}
-
 	return &findOneCode{
-		findOneMethod:          strings.Join(list, pathx.NL),
-		findOneInterfaceMethod: strings.Join(listMethod, pathx.NL),
+		findOneMethod:          strings.Join(list, NL),
+		findOneInterfaceMethod: strings.Join(listMethod, NL),
 	}, nil
 }
 
 func convertJoin(key Key, postgreSql bool) (in, paramJoinString, originalFieldString string) {
 	var inJoin, paramJoin, argJoin Join
 	for index, f := range key.Fields {
-		param := util.EscapeGolangKeyword(stringx.From(f.Name.ToCamel()).Untitle())
+		param := EscapeGolangKeyword(strcase.ToLowerCamel(f.Name))
 		inJoin = append(inJoin, fmt.Sprintf("%s %s", param, f.DataType))
 		paramJoin = append(paramJoin, param)
 		if postgreSql {
-			argJoin = append(argJoin, fmt.Sprintf("%s = $%d", wrapWithRawString(f.Name.Source(), postgreSql), index+1))
+			argJoin = append(argJoin, fmt.Sprintf("%s = $%d", wrapWithRawString(f.Name, postgreSql), index+1))
 		} else {
-			argJoin = append(argJoin, fmt.Sprintf("%s = ?", wrapWithRawString(f.Name.Source(), postgreSql)))
+			argJoin = append(argJoin, fmt.Sprintf("%s = ?", wrapWithRawString(f.Name, postgreSql)))
 		}
 	}
 	if len(inJoin) > 0 {
-		in = inJoin.With(", ").Source()
+		in = inJoin.With(", ")
 	}
 
 	if len(paramJoin) > 0 {
-		paramJoinString = paramJoin.With(",").Source()
+		paramJoinString = paramJoin.With(",")
 	}
 
 	if len(argJoin) > 0 {
-		originalFieldString = argJoin.With(" and ").Source()
+		originalFieldString = argJoin.With(" and ")
 	}
 	return in, paramJoinString, originalFieldString
 }

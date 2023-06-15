@@ -3,6 +3,7 @@ module github.com/nicolerobin/sqlx_gen
 go 1.19
 
 require (
+	github.com/golang-collections/collections v0.0.0-20130729185459-604e922904d3
 	github.com/iancoleman/strcase v0.2.0
 	github.com/logrusorgru/aurora v2.0.3+incompatible
 	github.com/nicolerobin/log v0.0.0-20220918121119-4b09ae04387a

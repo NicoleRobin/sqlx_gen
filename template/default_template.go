@@ -61,7 +61,7 @@ func (t *DefaultTemplate) Execute(data any) (*bytes.Buffer, error) {
 
 	formatOutput, err := goformat.Source(buf.Bytes())
 	if err != nil {
-		return nil, fmt.Errorf("goformat.Source() failed, err:%s", err)
+		return nil, fmt.Errorf("goformat.Source() failed, err:%s, srcCode:%s", err, string(buf.Bytes()))
 	}
 	buf.Reset()
 	buf.Write(formatOutput)

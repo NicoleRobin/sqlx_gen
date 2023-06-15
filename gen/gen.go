@@ -1,43 +1,42 @@
 package gen
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/nicolerobin/log"
 	"github.com/nicolerobin/sqlx_gen/parser"
+	"github.com/nicolerobin/sqlx_gen/template"
+	"github.com/zeromicro/ddl-parser/console"
 	"path/filepath"
 	"strings"
 )
 
 type (
-	// Generator generator
-	Generator struct {
-		dir          string
-		isPostgreSql bool
+	Generator interface {
 	}
-
-	// Table
-	Table struct {
-		parser.Table
-		PrimaryCacheKey        Key
-		UniqueCacheKey         []Key
-		ContainsUniqueCacheKey bool
-		ignoreColumns          []string
+	// Generator generator
+	defaultGenerator struct {
+		console.Console
+		dir           string
+		pkg           string
+		isPostgreSql  bool
+		ignoreColumns []string
 	}
 
 	// Option defines a function with argument defaultGenerator
 	Option func(generator *defaultGenerator)
 
 	code struct {
-		importCode string
-		varsCode   string
-		typesCode  string
-		newCode    string
-		insertCode string
-		findCode   string
-		updateCode string
-		deleteCode string
-		cacheExtra string
-		tableName  string
+		importsCode string
+		varsCode    string
+		typesCode   string
+		newCode     string
+		insertCode  string
+		findCode    []string
+		updateCode  string
+		deleteCode  string
+		cacheExtra  string
+		tableName   string
 	}
 
 	codeTuple struct {
@@ -48,7 +47,7 @@ type (
 
 // # TODO: i think it is not good to return an error in constructor func
 // NewGenerator create generator for generate code
-func NewGenerator(dir string) (*Generator, error) {
+func NewGenerator(dir string) (*defaultGenerator, error) {
 	if dir == "" {
 		dir = "."
 	}
@@ -56,12 +55,13 @@ func NewGenerator(dir string) (*Generator, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Generator{
+	return &defaultGenerator{
 		dir: absDir,
+		pkg: filepath.Base(absDir),
 	}, nil
 }
 
-func (g *Generator) StartFromDDL(filename string, database string) error {
+func (g *defaultGenerator) StartFromDDL(filename string, database string) error {
 	log.Info("StartFromDDL(), filename:%s, database:%s", filename, database)
 
 	modelList, err := g.genFromDDL(filename, database)
@@ -71,7 +71,7 @@ func (g *Generator) StartFromDDL(filename string, database string) error {
 	return g.createFile(modelList)
 }
 
-func (g *Generator) genFromDDL(filename, database string) (map[string]*codeTuple, error) {
+func (g *defaultGenerator) genFromDDL(filename, database string) (map[string]*codeTuple, error) {
 	log.Info("genFromDDL(), filename:%s, database:%s", filename, database)
 
 	tables, err := parser.Parse(filename, database, true)
@@ -96,7 +96,7 @@ func (g *Generator) genFromDDL(filename, database string) (map[string]*codeTuple
 	return m, nil
 }
 
-func (g *Generator) createFile(modelList map[string]*codeTuple) error {
+func (g *defaultGenerator) createFile(modelList map[string]*codeTuple) error {
 	log.Info("createFile, modelList:%+v", modelList)
 	for tableName, code := range modelList {
 		log.Info("tableName:%s, modelCode:%s, modelCustomCode:%s", tableName, code.modelCode,
@@ -105,7 +105,38 @@ func (g *Generator) createFile(modelList map[string]*codeTuple) error {
 	return nil
 }
 
-func (g *Generator) genModel(in *parser.Table, withCache bool) (string, error) {
+func (g *defaultGenerator) executeModel(table Table, code *code) (*bytes.Buffer, error) {
+	t := template.With("model").Parse(template.ModelGen).GoFmt(true)
+	output, err := t.Execute(map[string]any{
+		"pkg":         g.pkg,
+		"imports":     code.importsCode,
+		"vars":        code.varsCode,
+		"types":       code.typesCode,
+		"new":         code.newCode,
+		"insert":      code.insertCode,
+		"find":        strings.Join(code.findCode, "\n"),
+		"update":      code.updateCode,
+		"delete":      code.deleteCode,
+		"extraMethod": code.cacheExtra,
+		"tableName":   code.tableName,
+		"data":        table,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return output, nil
+}
+
+func genUpdate(table string, withCache, isPostgreSql bool) (string, string, error) {
+	return "", "", nil
+}
+
+func genDelete(table string, withCache, isPostgreSql bool) (string, string, error) {
+	return "", "", nil
+}
+
+func (g *defaultGenerator) genModel(in *parser.Table, withCache bool) (string, error) {
 	log.Info("genModel(), in:%+v", *in)
 	if len(in.PrimaryKey.Name) == 0 {
 		return "", fmt.Errorf("table %s: missing primary key", in.Name)
@@ -125,13 +156,13 @@ func (g *Generator) genModel(in *parser.Table, withCache bool) (string, error) {
 		return "", err
 	}
 
-	insertCode, insertCodeMethod, err := genInsert(table, withCache, g.isPostgreSql)
+	insertCode, interfaceInsert, err := genInsert(table, withCache, g.isPostgreSql)
 	if err != nil {
 		return "", err
 	}
 
 	findCode := make([]string, 0)
-	findOneCode, findOneCodeMethod, err := genFindOne(table, withCache, g.isPostgreSql)
+	findOneCode, interfaceFindOne, err := genFindOne(table, withCache, g.isPostgreSql)
 	if err != nil {
 		return "", err
 	}
@@ -142,15 +173,17 @@ func (g *Generator) genModel(in *parser.Table, withCache bool) (string, error) {
 	}
 
 	findCode = append(findCode, findOneCode, ret.findOneMethod)
-	updateCode, updateCodeMethod, err := genUpdate(table, withCache, g.isPostgreSql)
+	updateCode, interfaceUpdate, err := genUpdate(in.Name, withCache, g.isPostgreSql)
 	if err != nil {
 		return "", err
 	}
 
+	deleteCode, interfaceDelete, err := genDelete(in.Name, withCache, g.isPostgreSql)
+
 	var list []string
-	list = append(list, insertCodeMethod, findOneCodeMethod, ret.findOneInterfaceMethod,
-		updateCodeMethod, deleteCodeMethod)
-	typesCode, err := genTypes(table, strings.Join(list, "\n"), withCache)
+	list = append(list, interfaceInsert, interfaceFindOne, ret.findOneInterfaceMethod,
+		interfaceUpdate, interfaceDelete)
+	typesCode, err := genTypes(table, strings.Join(list, NL), withCache)
 	if err != nil {
 		return "", err
 	}
@@ -165,7 +198,22 @@ func (g *Generator) genModel(in *parser.Table, withCache bool) (string, error) {
 		return "", err
 	}
 
-	code := &code{}
+	code := &code{
+		importsCode: importsCode,
+		varsCode:    varsCode,
+		typesCode:   typesCode,
+		newCode:     newCode,
+		insertCode:  insertCode,
+		findCode:    findCode,
+		updateCode:  updateCode,
+		deleteCode:  deleteCode,
+		cacheExtra:  ret.cacheExtra,
+		tableName:   tableName,
+	}
 
-	return importsCode, nil
+	output, err := g.executeModel(table, code)
+	if err != nil {
+		return "", err
+	}
+	return output.String(), nil
 }

@@ -38,5 +38,3 @@ func genFindOne(table Table, withCache, postgreSql bool) (string, string, error)
 
 	return output.String(), findOneMethod.String(), nil
 }
-
-func genFineOneByField()

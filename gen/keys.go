@@ -1,6 +1,12 @@
 package gen
 
-import "github.com/nicolerobin/sqlx_gen/parser"
+import (
+	"github.com/iancoleman/strcase"
+	"github.com/nicolerobin/sqlx_gen/parser"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
+	"strings"
+)
 
 type Join []string
 
@@ -26,4 +32,33 @@ type Key struct {
 	FieldNameJoin Join
 	// Fields describes the fields of table
 	Fields []*parser.Field
+}
+
+func (j Join) With(sep string) string {
+	return strings.Join(j, sep)
+}
+
+func (j Join) Title() Join {
+	var join Join
+	for _, each := range j {
+		join = append(join, cases.Title(language.English, cases.NoLower).String(each))
+	}
+	return join
+}
+
+func (j Join) Upper() Join {
+	var join Join
+	for _, each := range j {
+		join = append(join, strings.ToUpper(each))
+	}
+	return join
+}
+
+func (j Join) Camel() Join {
+	var join Join
+	for _, each := range j {
+		join = append(join, strcase.ToCamel(each))
+	}
+
+	return join
 }
