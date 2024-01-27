@@ -11,7 +11,7 @@ import (
 )
 
 type (
-	// Table table
+	// Table the struct of table
 	Table struct {
 		Name        string
 		Db          string
@@ -21,7 +21,7 @@ type (
 		ContainsPQ  bool
 	}
 
-	// Field field
+	// Field the struct of field of table
 	Field struct {
 		NameOriginal string
 		Name         string
@@ -29,7 +29,7 @@ type (
 		Comment      string
 	}
 
-	// Primary
+	// Primary the primary field of table
 	Primary struct {
 		Field
 		AutoIncrement bool
@@ -39,6 +39,13 @@ type (
 // Parse 解析
 func Parse(filename, database string, strict bool) ([]*Table, error) {
 	log.Info("Parse(), filename:%s, database:%s", filename, database)
+	if !filepath.IsAbs(filename) {
+		var err error
+		filename, err = filepath.Abs(filename)
+		if err != nil {
+			return nil, err
+		}
+	}
 	p := parser.NewParser()
 	tables, err := p.From(filename)
 	if err != nil {

@@ -7,6 +7,7 @@ import (
 	"github.com/nicolerobin/sqlx_gen/parser"
 	"github.com/nicolerobin/sqlx_gen/template"
 	"github.com/zeromicro/ddl-parser/console"
+	"os"
 	"path/filepath"
 	"strings"
 )
@@ -26,7 +27,7 @@ type (
 	// Option defines a function with argument defaultGenerator
 	Option func(generator *defaultGenerator)
 
-	code struct {
+	Code struct {
 		importsCode string
 		varsCode    string
 		typesCode   string
@@ -39,14 +40,14 @@ type (
 		tableName   string
 	}
 
-	codeTuple struct {
+	CodeTuple struct {
 		modelCode       string
 		modelCustomCode string
 	}
 )
 
 // # TODO: i think it is not good to return an error in constructor func
-// NewGenerator create generator for generate code
+// NewGenerator create generator for generate Code
 func NewGenerator(dir string) (*defaultGenerator, error) {
 	if dir == "" {
 		dir = "."
@@ -61,17 +62,17 @@ func NewGenerator(dir string) (*defaultGenerator, error) {
 	}, nil
 }
 
-func (g *defaultGenerator) StartFromDDL(filename string, database string) error {
+func (g *defaultGenerator) StartFromDDL(filename, outputDir string, database string) error {
 	log.Info("StartFromDDL(), filename:%s, database:%s", filename, database)
 
 	modelList, err := g.genFromDDL(filename, database)
 	if err != nil {
 		return err
 	}
-	return g.createFile(modelList)
+	return g.createFile(outputDir, modelList)
 }
 
-func (g *defaultGenerator) genFromDDL(filename, database string) (map[string]*codeTuple, error) {
+func (g *defaultGenerator) genFromDDL(filename, database string) (map[string]*CodeTuple, error) {
 	log.Info("genFromDDL(), filename:%s, database:%s", filename, database)
 
 	tables, err := parser.Parse(filename, database, true)
@@ -80,7 +81,7 @@ func (g *defaultGenerator) genFromDDL(filename, database string) (map[string]*co
 		return nil, err
 	}
 
-	m := make(map[string]*codeTuple)
+	m := make(map[string]*CodeTuple)
 	for i, table := range tables {
 		log.Info("i:%d, table:%+v", i, *table)
 		code, err := g.genModel(table, false)
@@ -89,23 +90,43 @@ func (g *defaultGenerator) genFromDDL(filename, database string) (map[string]*co
 			continue
 		}
 
-		m[table.Name] = &codeTuple{
+		m[table.Name] = &CodeTuple{
 			modelCode: code,
 		}
 	}
 	return m, nil
 }
 
-func (g *defaultGenerator) createFile(modelList map[string]*codeTuple) error {
-	log.Info("createFile, modelList:%+v", modelList)
+func (g *defaultGenerator) createFile(outputDir string, modelList map[string]*CodeTuple) error {
+	log.Info("createFile, outputDir:%s, modelList:%+v", outputDir, modelList)
+	if _, err := os.Stat(outputDir); os.IsNotExist(err) {
+		err = os.MkdirAll(outputDir, 0755)
+		if err != nil {
+			log.Error("os.MkdirAll() failed, err:%s", err)
+			return err
+		}
+	}
+
 	for tableName, code := range modelList {
-		log.Info("tableName:%s, modelCode:%s, modelCustomCode:%s", tableName, code.modelCode,
-			code.modelCustomCode)
+		// log.Info("tableName:%s, modelCode:\n%s\n, modelCustomCode:\n%s", tableName, code.modelCode, code.modelCustomCode)
+
+		codeFileName := fmt.Sprintf("%s.go", tableName)
+		tableFilePath := filepath.Join(outputDir, codeFileName)
+		file, err := os.Create(tableFilePath)
+		if err != nil {
+			log.Error("os.Create() failed, err:%s, path:%s", err, tableFilePath)
+			continue
+		}
+		_, err = file.WriteString(code.modelCode)
+		if err != nil {
+			log.Error("file.WriteString() failed, err:%s", err)
+		}
+		file.Close()
 	}
 	return nil
 }
 
-func (g *defaultGenerator) executeModel(table Table, code *code) (*bytes.Buffer, error) {
+func (g *defaultGenerator) executeModel(table Table, code *Code) (*bytes.Buffer, error) {
 	t := template.With("model").Parse(template.ModelGen).GoFmt(true)
 	output, err := t.Execute(map[string]any{
 		"pkg":         g.pkg,
@@ -153,22 +174,26 @@ func (g *defaultGenerator) genModel(in *parser.Table, withCache bool) (string, e
 
 	varsCode, err := genVars(table, withCache, g.isPostgreSql)
 	if err != nil {
+		log.Error("genVars() failed, err:%s", err)
 		return "", err
 	}
 
 	insertCode, interfaceInsert, err := genInsert(table, withCache, g.isPostgreSql)
 	if err != nil {
+		log.Error("genInsert() failed, err:%s", err)
 		return "", err
 	}
 
 	findCode := make([]string, 0)
 	findOneCode, interfaceFindOne, err := genFindOne(table, withCache, g.isPostgreSql)
 	if err != nil {
+		log.Error("genFindOne() failed, err:%s", err)
 		return "", err
 	}
 
 	ret, err := genFindOneByField(table, withCache, g.isPostgreSql)
 	if err != nil {
+		log.Error("genFindOneByField() failed, err:%s", err)
 		return "", err
 	}
 
@@ -198,7 +223,7 @@ func (g *defaultGenerator) genModel(in *parser.Table, withCache bool) (string, e
 		return "", err
 	}
 
-	code := &code{
+	code := &Code{
 		importsCode: importsCode,
 		varsCode:    varsCode,
 		typesCode:   typesCode,

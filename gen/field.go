@@ -2,6 +2,7 @@ package gen
 
 import (
 	"github.com/iancoleman/strcase"
+	"github.com/nicolerobin/log"
 	"strings"
 
 	"github.com/nicolerobin/sqlx_gen/parser"
@@ -24,6 +25,7 @@ func genFields(table Table, fields []*parser.Field) (string, error) {
 }
 
 func genField(table Table, field *parser.Field) (string, error) {
+	log.Info("genField(), table:%+v, field:%+v", table, *field)
 	tag, err := genTag(table, field.NameOriginal)
 	if err != nil {
 		return "", err

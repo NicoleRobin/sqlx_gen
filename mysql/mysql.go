@@ -18,7 +18,7 @@ func Ddl(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	err = g.StartFromDDL(VarStrSrc, "test")
+	err = g.StartFromDDL(VarStrSrc, VarStrDir, "test")
 	if err != nil {
 		log.Error("g.StartFromDDL() failed, err:%s", err)
 		return

@@ -13,11 +13,12 @@ import (
 
 const (
 	BuildVersion = "v0.0.1"
+	AppName      = "sqlx_gen"
 )
 
 var (
 	rootCmd = cobra.Command{
-		Use:   "sqlx_gen",
+		Use:   AppName,
 		Short: "sqlx_gen is a tool to generate code for sqlx library",
 		Run:   mysql.Ddl,
 	}
