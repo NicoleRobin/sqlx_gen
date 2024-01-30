@@ -1,14 +1,6 @@
-type (
-	{{.lowerStartCamelObject}}Model interface{
-		{{.method}}
-	}
+type Model struct {
+    {{.fields}}
+}
 
-	default{{.upperStartCamelObject}}Model struct {
-		{{if .withCache}}sqlc.CachedConn{{else}}conn sqlx.SqlConn{{end}}
-		table string
-	}
-
-	{{.upperStartCamelObject}} struct {
-		{{.fields}}
-	}
-)
+type SearchCond struct {
+}

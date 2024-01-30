@@ -10,6 +10,7 @@ import (
 )
 
 func genFields(table Table, fields []*parser.Field) (string, error) {
+	log.Info("genFields(), table:%+v, fields:%+v", table, fields)
 	var list []string
 
 	for _, field := range fields {
@@ -31,8 +32,8 @@ func genField(table Table, field *parser.Field) (string, error) {
 		return "", err
 	}
 
-	output, err := template.With("types").
-		Parse(template.Types).
+	output, err := template.With("field").
+		Parse(template.Field).
 		Execute(map[string]any{
 			"name":       strcase.ToCamel(field.Name),
 			"type":       field.DataType,

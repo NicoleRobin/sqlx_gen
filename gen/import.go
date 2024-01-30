@@ -6,11 +6,10 @@ import (
 )
 
 func genImports(table Table, timeImport bool) (string, error) {
-	log.Info("table:%+v, timeImport:%t", table, timeImport)
-	buffer, err := template.With("import").Parse(template.ImportNoCache).Execute(map[string]any{
-		"time":       timeImport,
-		"containsPQ": table.ContainsPQ,
-		"data":       table,
+	log.Info("genImports(), table:%+v, timeImport:%t", table, timeImport)
+	buffer, err := template.With("import").Parse(template.Import).Execute(map[string]any{
+		"time": timeImport,
+		"data": table,
 	})
 	if err != nil {
 		log.Error("template.Parse() failed, err:%s", err)

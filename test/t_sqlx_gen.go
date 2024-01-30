@@ -5,65 +5,115 @@ package test
 import (
 	"context"
 	"database/sql"
-	"fmt"
-	"strings"
-	"time"
+	"go.uber.org/zap"
 
-	"github.com/zeromicro/go-zero/core/stores/builder"
-	"github.com/zeromicro/go-zero/core/stores/sqlc"
-	"github.com/zeromicro/go-zero/core/stores/sqlx"
-	"github.com/zeromicro/go-zero/core/stringx"
+	"gopkg.mihoyo.com/takumi/db"
 )
 
-var (
-	tSqlxGenFieldNames          = builder.RawFieldNames(&TSqlxGen{})
-	tSqlxGenRows                = strings.Join(tSqlxGenFieldNames, ",")
-	tSqlxGenRowsExpectAutoSet   = strings.Join(stringx.Remove(tSqlxGenFieldNames), ",")
-	tSqlxGenRowsWithPlaceHolder = strings.Join(stringx.Remove(tSqlxGenFieldNames, ""), "=?,") + "=?"
-)
+const tableName = "t_sqlx_gen"
 
-type (
-	tSqlxGenModel interface {
-		Insert(ctx context.Context, data *TSqlxGen) (sql.Result, error)
-		FindOne(ctx context.Context) (*TSqlxGen, error)
-	}
-
-	defaultTSqlxGenModel struct {
-		conn  sqlx.SqlConn
-		table string
-	}
-
-	TSqlxGen struct {
-	}
-)
-
-func newTSqlxGenModel(conn sqlx.SqlConn) *defaultTSqlxGenModel {
-	return &defaultTSqlxGenModel{
-		conn:  conn,
-		table: "t_sqlx_gen",
-	}
+type Model struct {
+	Id     int64  `db:"id"`
+	Name   string `db:"name"`
+	Age    int64  `db:"age"`
+	Gender int64  `db:"gender"`
 }
 
-func (m *defaultTSqlxGenModel) FindOne(ctx context.Context) (*TSqlxGen, error) {
-	query := fmt.Sprintf("select %s from %s where  = ? limit 1", tSqlxGenRows, m.table)
-	var resp TSqlxGen
-	err := m.conn.QueryRowCtx(ctx, &resp, query)
-	switch err {
-	case nil:
-		return &resp, nil
-	case sqlc.ErrNotFound:
-		return nil, ErrNotFound
-	default:
+type SearchCond struct {
+}
+
+// Insert add new row
+func Insert(ctx context.Context, row db.Row) (int64, error) {
+	e, err := models.GetDB()
+	if err != nil {
+		log.Error(ctx, "models.GetDB() failed", zap.Error(err))
+		return 0, err
+	}
+
+	res, err := e.Bind(tableName).Insert(rows...).Exec(ctx)
+	if err != nil {
+		log.Error(ctx, "select db failed", zap.Error(err))
+		return 0, err
+	}
+
+	return res.RowsAffected()
+}
+
+// Delete remove a row
+func Delete(ctx context.Context, id int64) (int64, error) {
+	e, err := models.GetDB()
+	if err != nil {
+		log.Error(ctx, "models.GetDB() failed", zap.Error(err))
+		return 0, err
+	}
+
+	res, err := e.Bind(tableName).Delete(row).Where(db.Eq("id", id)).Exec(ctx)
+	if err != nil {
+		log.Error(ctx, "update db failed", zap.Error(err))
+		return 0, err
+	}
+
+	return res.RowsAffected()
+}
+
+// Update modify a row
+func Update(ctx context.Context, id int64, row db.Row) (int64, error) {
+	e, err := models.GetDB()
+	if err != nil {
+		log.Error(ctx, "models.GetDB() failed", zap.Error(err))
+		return 0, err
+	}
+
+	res, err := e.Bind(tableName).Update(row).Where(db.Eq("id", id)).Exec(ctx)
+	if err != nil {
+		log.Error(ctx, "update db failed", zap.Error(err))
+		return 0, err
+	}
+
+	return res.RowsAffected()
+}
+
+// List get list
+func List(ctx context.Context, page, pageSize uint64, cond SearchCond) ([]*Model, error) {
+	e, err := models.GetDB()
+	if err != nil {
+		log.Error(ctx, "models.GetDB() failed", zap.Error(err))
 		return nil, err
 	}
+
+	var list []*Model
+	b := e.Bind(tableName).SelectStruct(Model{})
+	b = makeWhere(b, cond)
+	if page == 0 && pageSize == 0 {
+		err = b.All(ctx, &list)
+	} else {
+		err = b.Limit(pageSize).Offset((page-1)*pageSize).All(ctx, &list)
+	}
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return list, nil
+		}
+		log.Error(ctx, "select db failed", zap.Error(err))
+		return nil, err
+	}
+
+	return list, nil
 }
 
-func (m *defaultTSqlxGenModel) Insert(ctx context.Context, data *TSqlxGen) (sql.Result, error) {
-	query := fmt.Sprintf("insert into %s (%s) values ()", m.table, tSqlxGenRowsExpectAutoSet)
-	ret, err := m.conn.ExecCtx(ctx, query)
-	return ret, err
-}
+// Count get count
+func Count(ctx context.Context, cond SearchCond) (int64, error) {
+	e, err := models.GetDB()
+	if err != nil {
+		log.Error(ctx, "models.GetDB() failed", zap.Error(err))
+		return 0, err
+	}
 
-func (m *defaultTSqlxGenModel) tableName() string {
-	return m.table
+	b := e.Bind(tableName).SelectStruct(Model{})
+	b = makeWhere(b, cond)
+	count, err := b.Count(ctx)
+	if err != nil {
+		log.Error(ctx, "query count from db failed", zap.Error(err))
+		return 0, err
+	}
+	return count, nil
 }

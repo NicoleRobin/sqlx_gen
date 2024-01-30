@@ -3,12 +3,14 @@ package gen
 import (
 	"fmt"
 	"github.com/iancoleman/strcase"
+	"github.com/nicolerobin/log"
 	"github.com/nicolerobin/sqlx_gen/template"
 	"sort"
 	"strings"
 )
 
-func genVars(table Table, withCache, postgreSql bool) (string, error) {
+func genVars(table Table) (string, error) {
+	log.Info("genVars(), table:%+v", table)
 	keys := make([]string, 0)
 	keys = append(keys, table.PrimaryCacheKey.VarExpression)
 	for _, v := range table.UniqueCacheKey {
@@ -23,18 +25,12 @@ func genVars(table Table, withCache, postgreSql bool) (string, error) {
 		"upperStartCamelObject": camel,
 		"cacheKeys":             strings.Join(keys, "\n"),
 		"autoIncrement":         table.PrimaryKey.AutoIncrement,
-		"originalPrimaryKey":    wrapWithRawString(table.PrimaryKey.Name, postgreSql),
-		"withCache":             withCache,
-		"postgreSql":            postgreSql,
+		"originalPrimaryKey":    wrapWithRawString(table.PrimaryKey.Name),
 		"data":                  table,
 		"ignoreColumns": func() string {
 			var set = make(map[string]interface{})
 			for _, c := range table.ignoreColumns {
-				if postgreSql {
-					set[fmt.Sprintf(`"%s"`, c)] = struct{}{}
-				} else {
-					set[fmt.Sprintf("\"`%s`\"", c)] = struct{}{}
-				}
+				set[fmt.Sprintf("\"`%s`\"", c)] = struct{}{}
 			}
 			var list []string
 			for key, _ := range set {

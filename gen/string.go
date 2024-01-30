@@ -58,7 +58,7 @@ func Untitle(s string) string {
 	return string(unicode.ToLower(r)) + s[1:]
 }
 
-func wrapWithRawString(s string, postgreSql bool) string {
+func wrapWithRawString(s string) string {
 	return s
 }
 

@@ -1,14 +1,16 @@
-func (m *default{{.upperStartCamelObject}}Model) Update(ctx context.Context, {{if .containsIndexCache}}newData{{else}}data{{end}} *{{.upperStartCamelObject}}) error {
-	{{if .withCache}}{{if .containsIndexCache}}data, err:=m.FindOne(ctx, newData.{{.upperStartCamelPrimaryKey}})
-	if err!=nil{
-		return err
+// Update modify a row
+func Update(ctx context.Context, id int64, row db.Row) (int64, error) {
+	e, err := models.GetDB()
+	if err != nil {
+		log.Error(ctx, "models.GetDB() failed", zap.Error(err))
+		return 0, err
 	}
 
-{{end}}	{{.keys}}
-    _, {{if .containsIndexCache}}err{{else}}err:{{end}}= m.ExecCtx(ctx, func(ctx context.Context, conn sqlx.SqlConn) (result sql.Result, err error) {
-		query := fmt.Sprintf("update %s set %s where {{.originalPrimaryKey}} = {{if .postgreSql}}$1{{else}}?{{end}}", m.table, {{.lowerStartCamelObject}}RowsWithPlaceHolder)
-		return conn.ExecCtx(ctx, query, {{.expressionValues}})
-	}, {{.keyValues}}){{else}}query := fmt.Sprintf("update %s set %s where {{.originalPrimaryKey}} = {{if .postgreSql}}$1{{else}}?{{end}}", m.table, {{.lowerStartCamelObject}}RowsWithPlaceHolder)
-    _,err:=m.conn.ExecCtx(ctx, query, {{.expressionValues}}){{end}}
-	return err
+	res, err := e.Bind(tableName).Update(row).Where(db.Eq("id", id)).Exec(ctx)
+	if err != nil {
+		log.Error(ctx, "update db failed", zap.Error(err))
+		return 0, err
+	}
+
+	return res.RowsAffected()
 }

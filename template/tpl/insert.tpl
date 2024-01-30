@@ -1,9 +1,16 @@
-func (m *default{{.upperStartCamelObject}}Model) Insert(ctx context.Context, data *{{.upperStartCamelObject}}) (sql.Result,error) {
-	{{if .withCache}}{{.keys}}
-    ret, err := m.ExecCtx(ctx, func(ctx context.Context, conn sqlx.SqlConn) (result sql.Result, err error) {
-		query := fmt.Sprintf("insert into %s (%s) values ({{.expression}})", m.table, {{.lowerStartCamelObject}}RowsExpectAutoSet)
-		return conn.ExecCtx(ctx, query, {{.expressionValues}})
-	}, {{.keyValues}}){{else}}query := fmt.Sprintf("insert into %s (%s) values ({{.expression}})", m.table, {{.lowerStartCamelObject}}RowsExpectAutoSet)
-    ret,err:=m.conn.ExecCtx(ctx, query, {{.expressionValues}}){{end}}
-	return ret,err
+// Insert add new row
+func Insert(ctx context.Context, row db.Row) (int64,error) {
+	e, err := models.GetDB()
+	if err != nil {
+		log.Error(ctx, "models.GetDB() failed", zap.Error(err))
+		return 0, err
+	}
+
+	res, err := e.Bind(tableName).Insert(rows...).Exec(ctx)
+	if err != nil {
+		log.Error(ctx, "select db failed", zap.Error(err))
+		return 0, err
+	}
+
+	return res.RowsAffected()
 }

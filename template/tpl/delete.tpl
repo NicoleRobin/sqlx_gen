@@ -1,14 +1,16 @@
-func (m *default{{.upperStartCamelObject}}Model) Delete(ctx context.Context, {{.lowerStartCamelPrimaryKey}} {{.dataType}}) error {
-	{{if .withCache}}{{if .containsIndexCache}}data, err:=m.FindOne(ctx, {{.lowerStartCamelPrimaryKey}})
-	if err!=nil{
-		return err
+// Delete remove a row
+func Delete(ctx context.Context, id int64) (int64, error) {
+	e, err := models.GetDB()
+	if err != nil {
+		log.Error(ctx, "models.GetDB() failed", zap.Error(err))
+		return 0, err
 	}
 
-{{end}}	{{.keys}}
-    _, err {{if .containsIndexCache}}={{else}}:={{end}} m.ExecCtx(ctx, func(ctx context.Context, conn sqlx.SqlConn) (result sql.Result, err error) {
-		query := fmt.Sprintf("delete from %s where {{.originalPrimaryKey}} = {{if .postgreSql}}$1{{else}}?{{end}}", m.table)
-		return conn.ExecCtx(ctx, query, {{.lowerStartCamelPrimaryKey}})
-	}, {{.keyValues}}){{else}}query := fmt.Sprintf("delete from %s where {{.originalPrimaryKey}} = {{if .postgreSql}}$1{{else}}?{{end}}", m.table)
-		_,err:=m.conn.ExecCtx(ctx, query, {{.lowerStartCamelPrimaryKey}}){{end}}
-	return err
+	res, err := e.Bind(tableName).Delete(row).Where(db.Eq("id", id)).Exec(ctx)
+	if err != nil {
+		log.Error(ctx, "update db failed", zap.Error(err))
+		return 0, err
+	}
+
+	return res.RowsAffected()
 }

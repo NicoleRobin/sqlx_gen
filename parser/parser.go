@@ -196,6 +196,7 @@ func convertColumns(columns []*parser.Column, primaryColumn string, strict bool)
 		}
 
 		var field Field
+		field.NameOriginal = column.Name
 		field.Name = column.Name
 		field.DataType = dataType
 		field.Comment = comment

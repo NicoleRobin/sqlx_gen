@@ -3,13 +3,13 @@ package gen
 import (
 	"bytes"
 	"fmt"
+	"github.com/iancoleman/strcase"
 	"github.com/nicolerobin/log"
 	"github.com/nicolerobin/sqlx_gen/parser"
 	"github.com/nicolerobin/sqlx_gen/template"
 	"github.com/zeromicro/ddl-parser/console"
 	"os"
 	"path/filepath"
-	"strings"
 )
 
 type (
@@ -29,15 +29,14 @@ type (
 
 	Code struct {
 		importsCode string
-		varsCode    string
 		typesCode   string
-		newCode     string
-		insertCode  string
-		findCode    []string
-		updateCode  string
-		deleteCode  string
-		cacheExtra  string
 		tableName   string
+		varsCode    string
+		insertCode  string
+		deleteCode  string
+		updateCode  string
+		listCode    string
+		countCode   string
 	}
 
 	CodeTuple struct {
@@ -84,7 +83,7 @@ func (g *defaultGenerator) genFromDDL(filename, database string) (map[string]*Co
 	m := make(map[string]*CodeTuple)
 	for i, table := range tables {
 		log.Info("i:%d, table:%+v", i, *table)
-		code, err := g.genModel(table, false)
+		code, err := g.genModel(table)
 		if err != nil {
 			log.Error("g.genModel() failed, err:%s", err)
 			continue
@@ -129,18 +128,17 @@ func (g *defaultGenerator) createFile(outputDir string, modelList map[string]*Co
 func (g *defaultGenerator) executeModel(table Table, code *Code) (*bytes.Buffer, error) {
 	t := template.With("model").Parse(template.ModelGen).GoFmt(true)
 	output, err := t.Execute(map[string]any{
-		"pkg":         g.pkg,
-		"imports":     code.importsCode,
-		"vars":        code.varsCode,
-		"types":       code.typesCode,
-		"new":         code.newCode,
-		"insert":      code.insertCode,
-		"find":        strings.Join(code.findCode, "\n"),
-		"update":      code.updateCode,
-		"delete":      code.deleteCode,
-		"extraMethod": code.cacheExtra,
-		"tableName":   code.tableName,
-		"data":        table,
+		"pkg":       g.pkg,
+		"imports":   code.importsCode,
+		"types":     code.typesCode,
+		"tableName": code.tableName,
+		"vars":      code.varsCode,
+		"insert":    code.insertCode,
+		"delete":    code.deleteCode,
+		"update":    code.updateCode,
+		"list":      code.listCode,
+		"count":     code.countCode,
+		"data":      table,
 	})
 	if err != nil {
 		return nil, err
@@ -149,22 +147,38 @@ func (g *defaultGenerator) executeModel(table Table, code *Code) (*bytes.Buffer,
 	return output, nil
 }
 
-func genUpdate(table string, withCache, isPostgreSql bool) (string, string, error) {
-	return "", "", nil
+func genUpdate(table Table) (string, error) {
+	log.Info("genUpdate(), table:%+v", table)
+	camel := strcase.ToCamel(table.Name)
+	output, err := template.With("update").Parse(template.Update).Execute(map[string]any{
+		"upperStartCamelObject": camel,
+		"lowerStartCamelObject": strcase.ToLowerCamel(camel),
+		"data":                  table,
+	})
+	if err != nil {
+		return "", err
+	}
+
+	return output.String(), nil
 }
 
-func genDelete(table string, withCache, isPostgreSql bool) (string, string, error) {
-	return "", "", nil
+func genDelete(table Table) (string, error) {
+	log.Info("genDelete(), table:%+v", table)
+	output, err := template.With("delete").Parse(template.Delete).Execute(map[string]any{})
+	if err != nil {
+		return "", err
+	}
+
+	return output.String(), nil
 }
 
-func (g *defaultGenerator) genModel(in *parser.Table, withCache bool) (string, error) {
+func (g *defaultGenerator) genModel(in *parser.Table) (string, error) {
 	log.Info("genModel(), in:%+v", *in)
 	if len(in.PrimaryKey.Name) == 0 {
 		return "", fmt.Errorf("table %s: missing primary key", in.Name)
 	}
 
-	var table Table
-	table.Name = in.Name
+	var table = Table{Table: *in}
 
 	importsCode, err := genImports(table, true)
 	if err != nil {
@@ -172,48 +186,43 @@ func (g *defaultGenerator) genModel(in *parser.Table, withCache bool) (string, e
 		return "", err
 	}
 
-	varsCode, err := genVars(table, withCache, g.isPostgreSql)
+	varsCode, err := genVars(table)
 	if err != nil {
 		log.Error("genVars() failed, err:%s", err)
 		return "", err
 	}
 
-	insertCode, interfaceInsert, err := genInsert(table, withCache, g.isPostgreSql)
+	insertCode, err := genInsert(table)
 	if err != nil {
 		log.Error("genInsert() failed, err:%s", err)
 		return "", err
 	}
 
-	findCode := make([]string, 0)
-	findOneCode, interfaceFindOne, err := genFindOne(table, withCache, g.isPostgreSql)
+	deleteCode, err := genDelete(table)
 	if err != nil {
-		log.Error("genFindOne() failed, err:%s", err)
+		log.Error("genDelete() failed, err:%s", err)
 		return "", err
 	}
 
-	ret, err := genFindOneByField(table, withCache, g.isPostgreSql)
+	updateCode, err := genUpdate(table)
 	if err != nil {
-		log.Error("genFindOneByField() failed, err:%s", err)
+		log.Error("genUpdate() failed, err:%s", err)
 		return "", err
 	}
 
-	findCode = append(findCode, findOneCode, ret.findOneMethod)
-	updateCode, interfaceUpdate, err := genUpdate(in.Name, withCache, g.isPostgreSql)
+	listCode, err := genList(table)
 	if err != nil {
+		log.Error("genList() failed, err:%s", err)
 		return "", err
 	}
 
-	deleteCode, interfaceDelete, err := genDelete(in.Name, withCache, g.isPostgreSql)
-
-	var list []string
-	list = append(list, interfaceInsert, interfaceFindOne, ret.findOneInterfaceMethod,
-		interfaceUpdate, interfaceDelete)
-	typesCode, err := genTypes(table, strings.Join(list, NL), withCache)
+	countCode, err := genCount(table)
 	if err != nil {
+		log.Error("genCount() failed, err:%s", err)
 		return "", err
 	}
 
-	newCode, err := genNew(table, withCache, g.isPostgreSql)
+	typesCode, err := genTypes(table)
 	if err != nil {
 		return "", err
 	}
@@ -227,12 +236,11 @@ func (g *defaultGenerator) genModel(in *parser.Table, withCache bool) (string, e
 		importsCode: importsCode,
 		varsCode:    varsCode,
 		typesCode:   typesCode,
-		newCode:     newCode,
 		insertCode:  insertCode,
-		findCode:    findCode,
-		updateCode:  updateCode,
 		deleteCode:  deleteCode,
-		cacheExtra:  ret.cacheExtra,
+		updateCode:  updateCode,
+		listCode:    listCode,
+		countCode:   countCode,
 		tableName:   tableName,
 	}
 
