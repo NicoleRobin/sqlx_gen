@@ -6,8 +6,6 @@ import (
 	"context"
 	"database/sql"
 	"go.uber.org/zap"
-
-	"gopkg.mihoyo.com/takumi/db"
 )
 
 const tableName = "t_sqlx_gen"
